@@ -1,0 +1,181 @@
+# TAKEN FROM https://github.com/ray-project/ray/blob/eacc763c84d47c9c5b86b26a32fd62c685be84e6/python/ray/autoscaler/azure/example-gpu-docker.yaml
+
+# An unique identifier for the head node and workers of this cluster.
+cluster_name: gpu-docker
+
+# The maximum number of workers nodes to launch in addition to the head
+# node.
+min_workers: 1
+max_workers: 2
+
+# The autoscaler will scale up the cluster faster with higher upscaling speed.
+# E.g., if the task requires adding more nodes then autoscaler will gradually
+# scale up the cluster in chunks of upscaling_speed*currently_running_nodes.
+# This number should be > 0.
+upscaling_speed: 1.0
+
+# This executes all commands on all nodes in the docker container,
+# and opens all the necessary ports to support the Ray cluster.
+# Empty string means disabled.
+docker:
+    # image: "rayproject/ray-ml:latest-gpu"
+    # image: "rayproject/ray:latest" 
+    image: "pdemeulenaer/ray_custom_gpu:base"   
+    # image: rayproject/ray:latest-gpu   # use this one if you don't need ML dependencies, it's faster to pull
+    container_name: "ray_nvidia_docker"
+    pull_before_run: True
+    # run_options:   # Extra options to pass into "docker run"
+    #     - --ulimit nofile=65536:65536    
+
+    # # Example of running a GPU head with CPU workers
+    # head_image: "rayproject/ray-ml:latest-gpu"
+
+    # worker_image: "rayproject/ray-ml:latest"
+
+# If a node is idle for this many minutes, it will be removed.
+idle_timeout_minutes: 5
+
+# Cloud-provider specific configuration.
+provider:
+    type: azure
+    # https://azure.microsoft.com/en-us/global-infrastructure/locations
+    location: uksouth
+    resource_group: uks-rg-ray-docker
+    # set subscription id otherwise the default from az cli will be used
+    subscription_id: 0c8d69f4-bef1-45f3-b609-fca9fdf2569d
+    cache_stopped_nodes: False # False: nodes should be deleted when cluster goes down (i.e. when using "ray down -y config.yaml")
+
+
+# How Ray will authenticate with newly launched nodes.
+auth:
+    ssh_user: ubuntu
+    # you must specify paths to matching private and public key pair files
+    # use `ssh-keygen -t rsa -b 4096` to generate a new ssh key pair
+    ssh_private_key: ~/.ssh/itg-ds-vm-t4-gpu.pem
+    # changes to this should match what is specified in file_mounts
+    ssh_public_key: ~/.ssh/id_rsa.pub #itg-ds-vm-t4-gpu-pub.pem 
+
+# Tell the autoscaler the allowed node types and the resources they provide.
+# The key is the name of the node type, which is just for debugging purposes.
+# The node config specifies the launch config and physical instance type.
+available_node_types:
+    ray.head.gpu:
+        # The resources provided by this node type.
+        resources: {"CPU": 4, "GPU": 1}
+        # Provider-specific config, e.g. instance type.
+        max_workers: 2
+        node_config:
+            azure_arm_parameters:
+                vmSize: Standard_NC4as_T4_v3
+                # List images https://docs.microsoft.com/en-us/azure/virtual-machines/linux/cli-ps-findimage
+                imagePublisher: microsoft-dsvm
+                imageOffer: ubuntu-2004
+                imageSku: 2004-gen2
+                imageVersion: latest
+                # imagePublisher: Canonical # Azure Data Science VM blueprint (conda preinstalled)
+                # imageOffer: 0001-com-ubuntu-server-jammy
+                # imageSku: 22_04-lts-gen2
+                # imageVersion: latest                
+
+    ray.worker.gpu:
+        # The minimum number of nodes of this type to launch.
+        # This number should be >= 0.
+        min_workers: 1
+        # # The maximum number of workers nodes of this type to launch.
+        # # This takes precedence over min_workers.
+        max_workers: 2
+        # The resources provided by this node type.
+        resources: {"CPU": 4, "GPU": 1}
+        # Provider-specific config, e.g. instance type.
+        node_config:
+            azure_arm_parameters:
+                vmSize: Standard_NC4as_T4_v3
+                # List images https://docs.microsoft.com/en-us/azure/virtual-machines/linux/cli-ps-findimage
+                imagePublisher: microsoft-dsvm
+                imageOffer: ubuntu-2004
+                imageSku: 2004-gen2
+                imageVersion: latest
+                # imagePublisher: Canonical # Azure Data Science VM blueprint (conda preinstalled)
+                # imageOffer: 0001-com-ubuntu-server-jammy
+                # imageSku: 22_04-lts-gen2
+                # imageVersion: latest                
+                # optionally set priority to use Spot instances
+                priority: Spot
+                # set a maximum price for spot instances if desired
+                # billingProfile:
+                #     maxPrice: -1
+
+# Specify the node type of the head node (as configured above).
+head_node_type: ray.head.gpu
+
+# Files or directories to copy to the head and worker nodes. The format is a
+# dictionary from REMOTE_PATH: LOCAL_PATH, e.g.
+file_mounts: {
+#    "/path1/on/remote/machine": "/path1/on/local/machine",
+#    "/path2/on/remote/machine": "/path2/on/local/machine",
+     "~/.ssh/id_rsa.pub": "~/.ssh/id_rsa.pub"
+}
+
+# List of commands that will be run before `setup_commands`. If docker is
+# enabled, these commands will run outside the container and before docker
+# is setup.
+initialization_commands:
+    # 0. install NVIDIA driver
+    # - sudo apt update
+    # - sudo apt install --yes ubuntu-drivers-common
+    # - sudo ubuntu-drivers autoinstall
+    # - nvidia-smi
+    # enable docker setup
+
+    # 1. Install docker
+    # - curl -fsSL https://get.docker.com -o get-docker.sh # when using empty ubuntu
+    # - sudo sh get-docker.sh # when using empty ubuntu
+    # - sudo usermod -aG docker $USER # when using empty ubuntu
+    # - sudo systemctl restart docker -f # when using empty ubuntu
+    - sudo usermod -aG docker $USER || true # otherwise this, when using microsoft-dsvm (docker already installed in this image)
+
+    # 2. Install NVIDIA Container Toolkit installation: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/1.14.3/install-guide.html
+    - curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    - sudo apt update
+    - sudo apt install -y nvidia-container-toolkit
+
+    # 3. Configure the container runtime by using the nvidia-ctk command and restart the Docker daemon:
+    - sudo nvidia-ctk runtime configure --runtime=docker
+    - sudo systemctl restart docker -f
+
+    - sleep 10  # delay to avoid docker permission denied errors
+    # get rid of annoying Ubuntu message
+    - touch ~/.sudo_as_admin_successful
+
+# List of shell commands to run to set up nodes.
+# NOTE: rayproject/ray-ml:latest has ray latest bundled
+setup_commands: 
+    - pip install "protobuf==3.20.*"
+    # - python -m pip install --upgrade pip # already done in docker image
+    # - pip install -U ray[default]==2.9.0 # already installed in docker image
+    # - conda activate ray
+    # - sudo apt update
+    # - sudo apt install --yes ffmpeg      
+    # - pip install -U azure-cli-core==2.29.1 azure-identity==1.7.0 azure-mgmt-compute==23.1.0 azure-mgmt-network==19.0.0 azure-mgmt-resource==20.0.0 msrestazure==0.6.4
+    # - pip install -U torch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 'pydantic<2' 
+    # - pip install -U transformers==4.32.1 opencv-python==4.7.0.72 ffmpeg-python==0.2.0 moviepy==1.0.3 pymilvus==2.2.11 sentence-transformers==2.2.2
+    # - pip install -U 'pydantic<2'
+
+
+# Custom commands that will be run on the head node after common setup.
+# NOTE: rayproject/ray-ml:latest has azure packages bundled
+head_setup_commands: []
+    # - pip install -U azure-cli-core==2.22.0 azure-mgmt-compute==14.0.0 azure-mgmt-msi==1.0.0 azure-mgmt-network==10.2.0 azure-mgmt-resource==13.0.0
+
+# Custom commands that will be run on worker nodes after common setup.
+worker_setup_commands: []
+
+# Command to start ray on the head node. You don't need to change this.
+head_start_ray_commands:
+    - ray stop
+    - ulimit -n 65536; ray start --head --port=6379 --object-manager-port=8076 --autoscaling-config=~/ray_bootstrap_config.yaml
+
+# Command to start ray on worker nodes. You don't need to change this.
+worker_start_ray_commands:
+    - ray stop
+    - ulimit -n 65536; ray start --address=$RAY_HEAD_IP:6379 --object-manager-port=8076

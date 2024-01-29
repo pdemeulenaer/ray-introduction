@@ -1,0 +1,46 @@
+# This file was generated using the `serve build` command on Ray v2.9.1.
+
+proxy_location: EveryNode
+
+http_options:
+
+  host: 0.0.0.0
+
+  port: 8000
+
+grpc_options:
+
+  port: 9000
+
+  grpc_servicer_functions: []
+
+logging_config:
+
+  encoding: TEXT
+
+  log_level: INFO
+
+  logs_dir: null
+
+  enable_access_log: true
+
+applications:
+
+- name: app1
+
+  route_prefix: /
+
+  import_path: text_ml:app
+
+  runtime_env:
+    # working_dir: "https://github.com/ray-project/serve_config_examples/archive/HEAD.zip"
+    working_dir: "https://dev.azure.com/northell/Northell/_git/ray-demos?path=/serve/example_translation/example_translation.zip"
+    pip:
+      - torch
+      - transformers
+
+  deployments:
+
+  - name: Translator
+
+  - name: Summarizer

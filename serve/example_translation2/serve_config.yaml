@@ -1,0 +1,46 @@
+# This file was generated using the `serve build` command on Ray v2.9.1.
+
+proxy_location: EveryNode
+
+http_options:
+
+  host: 0.0.0.0
+
+  port: 8001
+
+grpc_options:
+
+  port: 9000
+
+  grpc_servicer_functions: []
+
+logging_config:
+
+  encoding: TEXT
+
+  log_level: INFO
+
+  logs_dir: null
+
+  enable_access_log: true
+
+applications:
+
+- name: translator_app
+
+  route_prefix: /
+
+  import_path: translation_ray_serve:translator_app
+
+  runtime_env:
+    pip:
+      - torch
+      - transformers
+
+  deployments:
+
+  - name: Translator
+    num_replicas: 2
+    ray_actor_options:
+      num_cpus: 0.2
+      num_gpus: 0.0
